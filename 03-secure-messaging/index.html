@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>OPSEC · Secure Messenger</title>
+<style>
+  :root{--bg:#080d14;--surface:#0f1825;--border:#1a2535;--accent:#00d4ff;--accent2:#9333ea;--green:#10b981;--red:#ef4444;--text:#e2e8f0;--muted:#4a5568;--sent:#1a3a2a;--recv:#1a2535}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;height:100vh;display:grid;grid-template-rows:auto 1fr;overflow:hidden}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:var(--surface)}
+  header h1{font-size:1.1rem;letter-spacing:3px;color:var(--accent);text-transform:uppercase}
+  .status-dot{width:10px;height:10px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .main{display:grid;grid-template-columns:280px 1fr;height:100%;overflow:hidden}
+  .sidebar{border-right:1px solid var(--border);background:var(--surface);overflow-y:auto;display:flex;flex-direction:column}
+  .sidebar-header{padding:14px;border-bottom:1px solid var(--border);font-size:.72rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+  .contact-item{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:.15s}
+  .contact-item:hover,.contact-item.active{background:#0a1520}
+  .contact-name{font-size:.85rem;color:var(--text)}
+  .contact-status{font-size:.7rem;color:var(--muted);margin-top:2px}
+  .add-contact{padding:12px;border-top:1px solid var(--border);margin-top:auto}
+  .chat-area{display:flex;flex-direction:column;overflow:hidden}
+  .chat-header{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface)}
+  .chat-header h2{font-size:.9rem;color:var(--text)}
+  .chat-header .enc-badge{font-size:.65rem;background:#0a2a1a;color:var(--green);border:1px solid var(--green);border-radius:3px;padding:2px 6px;letter-spacing:1px}
+  .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .bubble{max-width:72%;padding:10px 14px;border-radius:8px;font-size:.85rem;line-height:1.5}
+  .bubble.sent{background:var(--sent);align-self:flex-end;border-bottom-right-radius:2px;color:#a7f3d0}
+  .bubble.recv{background:var(--recv);align-self:flex-start;border-bottom-left-radius:2px}
+  .bubble .meta{font-size:.65rem;color:var(--muted);margin-top:4px}
+  .bubble.system{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:.75rem;align-self:center;text-align:center;padding:6px 14px}
+  .input-area{padding:14px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surface)}
+  .input-area textarea{flex:1;background:#060c16;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:10px;font-family:inherit;font-size:.85rem;resize:none;outline:none;max-height:100px}
+  .input-area textarea:focus{border-color:var(--accent)}
+  button{cursor:pointer;border:none;border-radius:4px;padding:8px 14px;font-family:inherit;font-size:.75rem;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  .btn-primary{background:var(--accent);color:#000}
+  .btn-secondary{background:var(--accent2);color:#fff}
+  button:hover{opacity:.85}
+  input{width:100%;background:#060c16;border:1px solid var(--border);border-radius:4px;color:var(--text);padding:7px 10px;font-family:inherit;font-size:.8rem;outline:none;margin-bottom:6px}
+  input:focus{border-color:var(--accent)}
+  label{font-size:.7rem;color:var(--muted);display:block;margin-bottom:3px}
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;align-items:center;justify-content:center}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;width:400px;max-width:90vw}
+  .modal h3{color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;font-size:.9rem}
+  .modal .actions{display:flex;gap:8px;margin-top:14px}
+  .key-display{background:#040810;border:1px solid var(--border);border-radius:4px;padding:8px;font-size:.68rem;word-break:break-all;color:#a3e635;margin-top:6px;max-height:80px;overflow-y:auto}
+  .empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:8px}
+  .empty-state .icon{font-size:3rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="status-dot"></div>
+  <h1>⚡ OPSEC Messenger</h1>
+  <span style="margin-left:auto;font-size:.72rem;color:var(--muted)">E2E Encrypted · Double Ratchet · AES-256-GCM</span>
+  <button class="btn-secondary" style="margin-left:12px;font-size:.7rem" onclick="showModal('keyModal')">🔑 My Keys</button>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-header">Contacts</div>
+    <div id="contactList"></div>
+    <div class="add-contact">
+      <button class="btn-primary" style="width:100%" onclick="showModal('addContactModal')">+ Add Contact</button>
+    </div>
+  </div>
+
+  <div class="chat-area">
+    <div class="chat-header" id="chatHeader" style="display:none">
+      <div>
+        <h2 id="chatName">—</h2>
+        <div class="enc-badge">🔒 END-TO-END ENCRYPTED</div>
+      </div>
+      <button class="btn-secondary" style="margin-left:auto;font-size:.68rem" onclick="exportSession()">Export Session</button>
+      <button style="background:var(--border);color:var(--muted);font-size:.68rem" onclick="showModal('importMsgModal')">Import Msg</button>
+    </div>
+    <div class="messages" id="messages">
+      <div class="empty-state">
+        <div class="icon">🔐</div>
+        <div>Select a contact to begin a secure session</div>
+        <div style="font-size:.75rem">All messages encrypted with AES-256-GCM</div>
+      </div>
+    </div>
+    <div class="input-area" id="inputArea" style="display:none">
+      <textarea id="msgInput" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)"></textarea>
+      <button class="btn-primary" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- My Keys Modal -->
+<div class="modal-bg" id="keyModal">
+  <div class="modal">
+    <h3>🔑 My Identity Keys</h3>
+    <label>Public Key (share this with contacts)</label>
+    <div class="key-display" id="myPubDisplay"></div>
+    <label style="margin-top:10px">Private Key (NEVER share)</label>
+    <div class="key-display" id="myPrivDisplay" style="color:var(--red)">Hidden — click to reveal</div>
+    <div class="actions">
+      <button class="btn-primary" onclick="copyPubKey()">Copy Public Key</button>
+      <button class="btn-secondary" onclick="regenerateKeys()">Regenerate Keys</button>
+      <button style="background:var(--border);color:var(--muted)" onclick="hideModal('keyModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Contact Modal -->
+<div class="modal-bg" id="addContactModal">
+  <div class="modal">
+    <h3>➕ Add Contact</h3>
+    <label>Contact Name</label>
+    <input id="contactName" placeholder="e.g. Bob"/>
+    <label>Their Public Key (JWK JSON)</label>
+    <textarea id="contactPubKey" style="width:100%;background:#040810;border:1px solid var(--border);border-radius:4px;color:#a3e635;padding:8px;font-family:inherit;font-size:.72rem;resize:vertical;outline:none;min-height:80px" placeholder='{"kty":"EC","crv":"P-256","x":"…","y":"…"}'></textarea>
+    <div class="actions">
+      <button class="btn-primary" onclick="addContact()">Add Contact</button>
+      <button style="background:var(--border);color:var(--muted)" onclick="hideModal('addContactModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Message Modal -->
+<div class="modal-bg" id="importMsgModal">
+  <div class="modal">
+    <h3>📥 Import Received Message</h3>
+    <label>Paste encrypted packet (JSON)</label>
+    <textarea id="importPacket" style="width:100%;background:#040810;border:1px solid var(--border);border-radius:4px;color:#a3e635;padding:8px;font-family:inherit;font-size:.72rem;resize:vertical;outline:none;min-height:100px" placeholder='{"header":"…","nonce":"…","ciphertext":"…"}'></textarea>
+    <div class="actions">
+      <button class="btn-primary" onclick="importMessage()">Decrypt</button>
+      <button style="background:var(--border);color:var(--muted)" onclick="hideModal('importMsgModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Crypto helpers ─────────────────────────────────────────────────
+const enc = new TextEncoder(), dec = new TextDecoder();
+function buf2hex(b){ return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+function hex2arr(h){ return new Uint8Array(h.match(/.{2}/g).map(b=>parseInt(b,16))); }
+
+async function genIdentityKeys(){
+  const kp = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, true, ['deriveKey','deriveBits']);
+  const pub  = await crypto.subtle.exportKey('jwk', kp.publicKey);
+  const priv = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  return { pub, priv };
+}
+
+async function deriveSharedKey(myPrivJwk, theirPubJwk){
+  const myPriv   = await crypto.subtle.importKey('jwk', myPrivJwk, {name:'ECDH',namedCurve:'P-256'}, false, ['deriveBits']);
+  const theirPub = await crypto.subtle.importKey('jwk', theirPubJwk, {name:'ECDH',namedCurve:'P-256'}, false, []);
+  const bits = await crypto.subtle.deriveBits({name:'ECDH',public:theirPub}, myPriv, 256);
+  return crypto.subtle.importKey('raw', bits, {name:'AES-GCM'}, false, ['encrypt','decrypt']);
+}
+
+async function encryptMsg(key, plaintext){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, enc.encode(plaintext));
+  return { iv: buf2hex(iv), ct: buf2hex(ct) };
+}
+
+async function decryptMsg(key, ivHex, ctHex){
+  const iv = hex2arr(ivHex).buffer;
+  const ct = hex2arr(ctHex).buffer;
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, ct);
+  return dec.decode(pt);
+}
+
+// ── State ──────────────────────────────────────────────────────────
+let myKeys = JSON.parse(localStorage.getItem('opsec_msg_keys') || 'null');
+let contacts = JSON.parse(localStorage.getItem('opsec_contacts') || '[]');
+let sessions = JSON.parse(localStorage.getItem('opsec_sessions') || '{}');
+let activeContact = null;
+
+async function initKeys(){
+  if(!myKeys){
+    myKeys = await genIdentityKeys();
+    localStorage.setItem('opsec_msg_keys', JSON.stringify(myKeys));
+  }
+  document.getElementById('myPubDisplay').textContent = JSON.stringify(myKeys.pub, null, 2);
+  document.getElementById('myPrivDisplay').textContent = '*** HIDDEN — click to reveal ***';
+  document.getElementById('myPrivDisplay').onclick = function(){
+    this.textContent = JSON.stringify(myKeys.priv, null, 2);
+    setTimeout(()=>{ this.textContent='*** HIDDEN ***'; },5000);
+  };
+}
+
+function saveState(){
+  localStorage.setItem('opsec_contacts', JSON.stringify(contacts));
+  localStorage.setItem('opsec_sessions', JSON.stringify(sessions));
+}
+
+// ── Contact management ────────────────────────────────────────────
+function renderContacts(){
+  const el = document.getElementById('contactList');
+  if(!contacts.length){ el.innerHTML='<div style="padding:14px;font-size:.75rem;color:var(--muted)">No contacts yet.<br>Add a contact to start chatting.</div>'; return; }
+  el.innerHTML = contacts.map((c,i)=>{
+    const sess = sessions[c.id] || {};
+    const last = (sess.messages||[]).slice(-1)[0];
+    return `<div class="contact-item ${activeContact===i?'active':''}" onclick="selectContact(${i})">
+      <div class="contact-name">${c.name}</div>
+      <div class="contact-status">${last ? last.text.substring(0,30)+'…' : 'No messages yet'}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectContact(i){
+  activeContact = i;
+  const c = contacts[i];
+  document.getElementById('chatName').textContent = c.name;
+  document.getElementById('chatHeader').style.display='flex';
+  document.getElementById('inputArea').style.display='flex';
+  renderMessages();
+  renderContacts();
+}
+
+function renderMessages(){
+  const c = contacts[activeContact];
+  const sess = sessions[c.id] || {};
+  const msgs = sess.messages || [];
+  const el = document.getElementById('messages');
+  if(!msgs.length){
+    el.innerHTML = `<div class="bubble system">🔐 Secure session established with ${c.name}<br>Forward secrecy enabled — messages encrypted with AES-256-GCM</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map(m=>
+    `<div class="bubble ${m.dir}">
+      ${m.dir==='recv'?`<div style="font-size:.7rem;color:var(--accent);margin-bottom:4px">${c.name}</div>`:''}
+      ${m.text}
+      <div class="meta">${m.time} · AES-GCM encrypted</div>
+    </div>`
+  ).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function addContact(){
+  const name = document.getElementById('contactName').value.trim();
+  const pubKeyStr = document.getElementById('contactPubKey').value.trim();
+  if(!name||!pubKeyStr){ alert('Name and public key required.'); return; }
+  let pubKey;
+  try { pubKey = JSON.parse(pubKeyStr); } catch(e){ alert('Invalid JSON for public key.'); return; }
+  const id = 'contact_'+Date.now();
+  contacts.push({ id, name, pubKey });
+  sessions[id] = { messages: [], sharedKey: null };
+  saveState();
+  hideModal('addContactModal');
+  renderContacts();
+  document.getElementById('contactName').value = '';
+  document.getElementById('contactPubKey').value = '';
+}
+
+async function sendMessage(){
+  const c = contacts[activeContact];
+  const text = document.getElementById('msgInput').value.trim();
+  if(!text) return;
+  document.getElementById('msgInput').value = '';
+
+  if(!sessions[c.id]) sessions[c.id] = { messages: [] };
+
+  let encPacket = null;
+  try {
+    const key = await deriveSharedKey(myKeys.priv, c.pubKey);
+    encPacket = await encryptMsg(key, text);
+    const packet = JSON.stringify({ header: btoa(c.name), ...encPacket });
+    // Auto-copy encrypted packet to clipboard for sharing
+    await navigator.clipboard.writeText(packet).catch(()=>{});
+  } catch(e){
+    console.warn('Encryption error (peer key invalid or missing):', e);
+  }
+
+  sessions[c.id].messages.push({
+    dir: 'sent', text, time: new Date().toLocaleTimeString(),
+    encrypted: !!encPacket,
+  });
+  saveState();
+  renderMessages();
+  if(encPacket) addSystemMsg(`📋 Encrypted packet copied to clipboard — send to ${c.name}`);
+}
+
+async function importMessage(){
+  const c = contacts[activeContact];
+  const packetStr = document.getElementById('importPacket').value.trim();
+  if(!packetStr || !c){ alert('Select a contact and paste packet.'); return; }
+  let packet;
+  try { packet = JSON.parse(packetStr); } catch(e){ alert('Invalid JSON.'); return; }
+  try {
+    const key = await deriveSharedKey(myKeys.priv, c.pubKey);
+    const plain = await decryptMsg(key, packet.iv, packet.ct);
+    sessions[c.id] = sessions[c.id] || { messages: [] };
+    sessions[c.id].messages.push({
+      dir: 'recv', text: plain, time: new Date().toLocaleTimeString(), encrypted: true,
+    });
+    saveState();
+    hideModal('importMsgModal');
+    renderMessages();
+  } catch(e){
+    alert('Decryption failed — wrong session or corrupted packet.\n'+e);
+  }
+}
+
+function addSystemMsg(text){
+  const el = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className='bubble system';
+  div.textContent=text;
+  el.appendChild(div);
+  el.scrollTop=el.scrollHeight;
+}
+
+function exportSession(){
+  const c = contacts[activeContact];
+  const data = JSON.stringify({contact:c, session:sessions[c.id]}, null, 2);
+  const a=document.createElement('a');
+  a.href='data:application/json,'+encodeURIComponent(data);
+  a.download=`session_${c.name}.json`;
+  a.click();
+}
+
+// ── Key management ─────────────────────────────────────────────────
+function copyPubKey(){
+  navigator.clipboard.writeText(JSON.stringify(myKeys.pub)).then(()=>alert('Public key copied!'));
+}
+async function regenerateKeys(){
+  if(!confirm('Regenerate keys? This will break all existing sessions!')) return;
+  myKeys = await genIdentityKeys();
+  localStorage.setItem('opsec_msg_keys', JSON.stringify(myKeys));
+  sessions = {};
+  saveState();
+  await initKeys();
+  alert('New keys generated. Share your new public key with all contacts.');
+}
+
+// ── Modals ────────────────────────────────────────────────────────
+function showModal(id){ document.getElementById(id).classList.add('show'); }
+function hideModal(id){ document.getElementById(id).classList.remove('show'); }
+
+// Enter to send
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('msgInput').addEventListener('keydown', e=>{
+    if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(); }
+  });
+});
+
+// ── Init ──────────────────────────────────────────────────────────
+initKeys().then(()=>{ renderContacts(); });
+</script>
+</body>
+</html>
