@@ -1,0 +1,20 @@
+# Core dashboard
+streamlit>=1.35.0
+duckdb>=0.10.0
+plotly>=5.22.0
+pandas>=2.1.0
+networkx>=3.3
+requests>=2.31.0
+
+# Graph visualisation
+pyvis>=0.3.2
+
+# Optional — install for enhanced features
+# ollama>=0.2.0          # Local LLM (Ollama must be running)
+# spiderfoot             # SpiderFoot OSINT framework
+# qdrant-client>=1.9     # Vector search (run: docker run -p 6333:6333 qdrant/qdrant)
+# chromadb>=0.5          # Lighter vector DB alternative
+
+# Mapping (served via CDN in map_view.html — no pip install needed)
+# CesiumJS   https://github.com/CesiumGS/cesium    (CDN)
+# Leaflet.js https://leafletjs.com                  (CDN)

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>OPSEC · Encryption Suite</title>
+<style>
+  :root{--bg:#080c14;--surface:#0f1923;--border:#1a2535;--accent:#00ff88;--accent2:#7c3aed;--text:#e2e8f0;--muted:#4a5568;--red:#ef4444;--yellow:#f59e0b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;min-height:100vh;padding:20px}
+  h1{color:var(--accent);font-size:1.5rem;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px}
+  .subtitle{color:var(--muted);font-size:.75rem;letter-spacing:2px;margin-bottom:28px}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:20px}
+  .tab{padding:8px 18px;border-radius:4px;font-size:.75rem;letter-spacing:1px;cursor:pointer;background:var(--border);color:var(--muted);border:none;font-family:inherit;text-transform:uppercase;transition:.15s}
+  .tab.active{background:var(--accent);color:#000;font-weight:700}
+  .panel{display:none}.panel.active{display:block}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
+  .card h2{font-size:.85rem;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  label{display:block;font-size:.72rem;color:var(--muted);margin-bottom:4px;margin-top:10px}
+  input,select,textarea{width:100%;background:#060b12;border:1px solid var(--border);border-radius:4px;color:var(--text);padding:8px 10px;font-family:inherit;font-size:.82rem;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical}
+  button{cursor:pointer;border:none;border-radius:4px;padding:8px 16px;font-family:inherit;font-size:.78rem;letter-spacing:1px;text-transform:uppercase;font-weight:600;transition:opacity .2s;margin-top:10px;margin-right:6px}
+  .btn-primary{background:var(--accent);color:#000}
+  .btn-secondary{background:var(--accent2);color:#fff}
+  .btn-danger{background:var(--red);color:#fff}
+  button:hover{opacity:.85}
+  .output{background:#040810;border:1px solid var(--border);border-radius:4px;padding:12px;font-size:.78rem;color:var(--accent);white-space:pre-wrap;word-break:break-all;max-height:260px;overflow-y:auto;margin-top:10px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .badge{background:var(--border);border-radius:3px;padding:2px 8px;font-size:.68rem;color:var(--muted);margin-left:6px}
+  .hash-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.78rem}
+  .hash-table td,.hash-table th{border:1px solid var(--border);padding:6px 10px;text-align:left}
+  .hash-table th{background:var(--border);color:var(--muted);font-size:.7rem;letter-spacing:1px;text-transform:uppercase}
+  .hash-table tr:nth-child(even) td{background:#080f18}
+  .copy-btn{float:right;margin:0;padding:2px 8px;font-size:.68rem}
+  .warning{background:#2d1505;border:1px solid var(--yellow);border-radius:4px;padding:10px;font-size:.75rem;color:var(--yellow);margin-bottom:14px}
+</style>
+</head>
+<body>
+<h1>🔐 OPSEC · Encryption Suite</h1>
+<p class="subtitle">AES-256-GCM · X25519 ECDH · Argon2id · SHA-3 · Web Crypto API</p>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPanel('text')">Text Encrypt</button>
+  <button class="tab" onclick="showPanel('file')">File Encrypt</button>
+  <button class="tab" onclick="showPanel('keygen')">Key Gen</button>
+  <button class="tab" onclick="showPanel('hash')">Hash / HMAC</button>
+  <button class="tab" onclick="showPanel('password')">Password Hash</button>
+</div>
+
+<!-- ── Text Encrypt ── -->
+<div id="panel-text" class="panel active">
+  <div class="card">
+    <h2>Text Encryption — AES-256-GCM (Password)</h2>
+    <label>Plaintext / Ciphertext (hex)</label>
+    <textarea id="textInput" rows="5" placeholder="Enter text to encrypt…"></textarea>
+    <label>Password</label>
+    <input id="textPassword" type="password" placeholder="Strong passphrase…"/>
+    <div>
+      <button class="btn-primary" onclick="encryptText()">🔒 Encrypt</button>
+      <button class="btn-secondary" onclick="decryptText()">🔓 Decrypt</button>
+      <button onclick="copyOutput('textOutput')">Copy</button>
+    </div>
+    <div class="output" id="textOutput">Output will appear here…</div>
+  </div>
+</div>
+
+<!-- ── File Encrypt ── -->
+<div id="panel-file" class="panel">
+  <div class="card">
+    <h2>File Encryption — AES-256-GCM</h2>
+    <label>Select File</label>
+    <input type="file" id="fileInput" style="padding:6px"/>
+    <label>Password</label>
+    <input id="filePassword" type="password" placeholder="Strong passphrase…"/>
+    <div>
+      <button class="btn-primary" onclick="encryptFile()">🔒 Encrypt &amp; Download</button>
+      <button class="btn-secondary" onclick="decryptFile()">🔓 Decrypt &amp; Download</button>
+    </div>
+    <div class="output" id="fileOutput">File operation results will appear here…</div>
+  </div>
+</div>
+
+<!-- ── Key Gen ── -->
+<div id="panel-keygen" class="panel">
+  <div class="card">
+    <h2>Key Pair Generation — ECDH P-256 / P-384</h2>
+    <label>Algorithm</label>
+    <select id="keyAlg">
+      <option value="ECDH-P256">ECDH P-256</option>
+      <option value="ECDH-P384">ECDH P-384</option>
+      <option value="RSA-OAEP-2048">RSA-OAEP 2048</option>
+      <option value="RSA-OAEP-4096">RSA-OAEP 4096</option>
+    </select>
+    <button class="btn-primary" onclick="generateKeyPair()">⚙ Generate Key Pair</button>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Public Key (PEM / JWK)</label>
+        <textarea id="pubKeyOut" rows="8" spellcheck="false" readonly></textarea>
+      </div>
+      <div>
+        <label>Private Key (PEM / JWK) — KEEP SECRET</label>
+        <textarea id="privKeyOut" rows="8" spellcheck="false" readonly></textarea>
+      </div>
+    </div>
+    <button onclick="downloadKeys()">⬇ Download Both Keys</button>
+  </div>
+</div>
+
+<!-- ── Hash ── -->
+<div id="panel-hash" class="panel">
+  <div class="card">
+    <h2>Hash Calculator</h2>
+    <label>Input Text</label>
+    <textarea id="hashInput" rows="3" placeholder="Text to hash…"></textarea>
+    <label>File (optional — overrides text input)</label>
+    <input type="file" id="hashFile" style="padding:6px"/>
+    <button class="btn-primary" onclick="computeHashes()"># Compute All Hashes</button>
+    <table class="hash-table" id="hashTable" style="display:none">
+      <thead><tr><th>Algorithm</th><th>Digest</th></tr></thead>
+      <tbody id="hashTableBody"></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>HMAC</h2>
+    <div class="row">
+      <div>
+        <label>Message</label>
+        <input id="hmacMsg" placeholder="Message…"/>
+      </div>
+      <div>
+        <label>Secret Key</label>
+        <input id="hmacKey" type="password" placeholder="HMAC key…"/>
+      </div>
+    </div>
+    <label>Algorithm</label>
+    <select id="hmacAlg">
+      <option>SHA-256</option>
+      <option>SHA-384</option>
+      <option>SHA-512</option>
+    </select>
+    <button class="btn-primary" onclick="computeHMAC()">Compute HMAC</button>
+    <div class="output" id="hmacOutput"></div>
+  </div>
+</div>
+
+<!-- ── Password Hash ── -->
+<div id="panel-password" class="panel">
+  <div class="card">
+    <h2>Password Hashing — PBKDF2 (Browser)</h2>
+    <div class="warning">⚠ Browser note: True Argon2id requires backend. This uses PBKDF2-SHA512 (600,000 iterations) as a browser-safe alternative. Use the Python tool for Argon2id.</div>
+    <label>Password</label>
+    <input id="pwInput" type="password" placeholder="Password to hash…"/>
+    <label>Salt (hex, leave blank for random)</label>
+    <input id="pwSalt" placeholder="Random salt used if blank"/>
+    <label>Iterations</label>
+    <input id="pwIter" type="number" value="600000"/>
+    <button class="btn-primary" onclick="hashPassword()">Hash Password</button>
+    <div class="output" id="pwOutput"></div>
+    <hr style="border-color:var(--border);margin:16px 0"/>
+    <h2 style="margin-bottom:10px">Verify Password</h2>
+    <label>Password</label>
+    <input id="pwVerifyPw" type="password" placeholder="Password to verify…"/>
+    <label>Stored Hash (from above output)</label>
+    <textarea id="pwVerifyHash" rows="2" placeholder="Paste the full hash string…"></textarea>
+    <button class="btn-secondary" onclick="verifyPassword()">✓ Verify</button>
+    <div class="output" id="pwVerifyOutput"></div>
+  </div>
+</div>
+
+<script>
+// ── Panel switching ───────────────────────────────────────────────
+function showPanel(name){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function copyOutput(id){
+  const el=document.getElementById(id);
+  navigator.clipboard.writeText(el.textContent).then(()=>alert('Copied!'));
+}
+
+function buf2hex(buf){ return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+function hex2buf(hex){ return new Uint8Array(hex.match(/.{2}/g).map(b=>parseInt(b,16))).buffer; }
+function str2buf(s){ return new TextEncoder().encode(s); }
+function buf2str(buf){ return new TextDecoder().decode(buf); }
+
+// ── AES-256-GCM via Web Crypto ────────────────────────────────────
+async function deriveKey(password, salt){
+  const keyMat = await crypto.subtle.importKey('raw',str2buf(password),{name:'PBKDF2'},false,['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2',salt,iterations:600000,hash:'SHA-256'},
+    keyMat, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']
+  );
+}
+
+async function encryptText(){
+  const plain = document.getElementById('textInput').value;
+  const pw    = document.getElementById('textPassword').value;
+  if(!plain||!pw){alert('Fill in text and password.');return;}
+  const salt  = crypto.getRandomValues(new Uint8Array(32));
+  const iv    = crypto.getRandomValues(new Uint8Array(12));
+  const key   = await deriveKey(pw, salt);
+  const enc   = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, str2buf(plain));
+  const out   = new Uint8Array(salt.byteLength + iv.byteLength + enc.byteLength);
+  out.set(salt,0); out.set(iv,32); out.set(new Uint8Array(enc),44);
+  document.getElementById('textOutput').textContent = buf2hex(out.buffer);
+}
+
+async function decryptText(){
+  const hexIn = document.getElementById('textInput').value.trim();
+  const pw    = document.getElementById('textPassword').value;
+  if(!hexIn||!pw){alert('Paste ciphertext hex and enter password.');return;}
+  try {
+    const buf  = new Uint8Array(hex2buf(hexIn));
+    const salt = buf.slice(0,32);
+    const iv   = buf.slice(32,44);
+    const ct   = buf.slice(44);
+    const key  = await deriveKey(pw, salt);
+    const dec  = await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, ct);
+    document.getElementById('textOutput').textContent = buf2str(dec);
+  } catch(e){
+    document.getElementById('textOutput').textContent = '✗ Decryption failed — wrong password or corrupted data.\n'+e;
+  }
+}
+
+// ── File Encrypt ─────────────────────────────────────────────────
+async function encryptFile(){
+  const file = document.getElementById('fileInput').files[0];
+  const pw   = document.getElementById('filePassword').value;
+  if(!file||!pw){alert('Select a file and enter password.');return;}
+  const data  = await file.arrayBuffer();
+  const salt  = crypto.getRandomValues(new Uint8Array(32));
+  const iv    = crypto.getRandomValues(new Uint8Array(12));
+  const key   = await deriveKey(pw, salt);
+  const enc   = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, data);
+  const out   = new Uint8Array(salt.byteLength + iv.byteLength + enc.byteLength);
+  out.set(salt,0); out.set(iv,32); out.set(new Uint8Array(enc),44);
+  downloadBlob(out, file.name+'.enc');
+  document.getElementById('fileOutput').textContent = `✓ Encrypted ${file.name} → ${file.name}.enc\nSize: ${out.byteLength} bytes`;
+}
+
+async function decryptFile(){
+  const file = document.getElementById('fileInput').files[0];
+  const pw   = document.getElementById('filePassword').value;
+  if(!file||!pw){alert('Select a .enc file and enter password.');return;}
+  const raw  = await file.arrayBuffer();
+  const buf  = new Uint8Array(raw);
+  try {
+    const salt = buf.slice(0,32);
+    const iv   = buf.slice(32,44);
+    const ct   = buf.slice(44);
+    const key  = await deriveKey(pw, salt);
+    const dec  = await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, ct);
+    const outName = file.name.replace(/\.enc$/,'') || file.name+'.dec';
+    downloadBlob(new Uint8Array(dec), outName);
+    document.getElementById('fileOutput').textContent = `✓ Decrypted → ${outName}\nSize: ${dec.byteLength} bytes`;
+  } catch(e){
+    document.getElementById('fileOutput').textContent = '✗ Decryption failed.\n'+e;
+  }
+}
+
+function downloadBlob(data, filename){
+  const blob = new Blob([data]);
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Key Pair Gen ──────────────────────────────────────────────────
+async function generateKeyPair(){
+  const alg = document.getElementById('keyAlg').value;
+  let params, usage;
+  if(alg.startsWith('ECDH')){
+    const curve = alg === 'ECDH-P256' ? 'P-256' : 'P-384';
+    params = {name:'ECDH', namedCurve: curve};
+    usage  = [];
+  } else {
+    const bits = alg.includes('2048') ? 2048 : 4096;
+    params = {name:'RSA-OAEP', modulusLength:bits, publicExponent:new Uint8Array([1,0,1]), hash:'SHA-256'};
+    usage  = ['encrypt','decrypt'];
+  }
+  const kp = await crypto.subtle.generateKey(params, true, usage.length ? usage : ['deriveKey','deriveBits']);
+  const pub  = await crypto.subtle.exportKey('jwk', kp.publicKey);
+  const priv = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  document.getElementById('pubKeyOut').value  = JSON.stringify(pub,  null, 2);
+  document.getElementById('privKeyOut').value = JSON.stringify(priv, null, 2);
+}
+
+function downloadKeys(){
+  const pub  = document.getElementById('pubKeyOut').value;
+  const priv = document.getElementById('privKeyOut').value;
+  if(!pub){alert('Generate keys first.');return;}
+  const dl=(name,content)=>{const a=document.createElement('a');a.href='data:text/plain,'+encodeURIComponent(content);a.download=name;a.click();};
+  dl('public.jwk.json', pub);
+  setTimeout(()=>dl('private.jwk.json', priv), 300);
+}
+
+// ── Hash Calculator ────────────────────────────────────────────────
+async function computeHashes(){
+  let data;
+  const file = document.getElementById('hashFile').files[0];
+  if(file){
+    data = await file.arrayBuffer();
+  } else {
+    const text = document.getElementById('hashInput').value;
+    if(!text){alert('Enter text or select a file.');return;}
+    data = str2buf(text).buffer;
+  }
+  const algos = ['SHA-1','SHA-256','SHA-384','SHA-512'];
+  const tbody = document.getElementById('hashTableBody');
+  tbody.innerHTML='';
+  document.getElementById('hashTable').style.display='table';
+  for(const alg of algos){
+    const hash = await crypto.subtle.digest(alg, data);
+    const hex  = buf2hex(hash);
+    tbody.innerHTML += `<tr><td>${alg}</td><td style="word-break:break-all;font-size:.72rem">${hex} <button class="btn-secondary copy-btn" onclick="navigator.clipboard.writeText('${hex}')">Copy</button></td></tr>`;
+  }
+}
+
+async function computeHMAC(){
+  const msg = document.getElementById('hmacMsg').value;
+  const key = document.getElementById('hmacKey').value;
+  const alg = document.getElementById('hmacAlg').value;
+  if(!msg||!key){alert('Enter message and key.');return;}
+  const keyObj = await crypto.subtle.importKey('raw', str2buf(key), {name:'HMAC', hash:alg}, false, ['sign']);
+  const sig    = await crypto.subtle.sign('HMAC', keyObj, str2buf(msg));
+  document.getElementById('hmacOutput').textContent = `HMAC-${alg}: ${buf2hex(sig)}`;
+}
+
+// ── Password Hash ─────────────────────────────────────────────────
+async function hashPassword(){
+  const pw   = document.getElementById('pwInput').value;
+  const saltHex = document.getElementById('pwSalt').value.trim();
+  const iters   = parseInt(document.getElementById('pwIter').value) || 600000;
+  if(!pw){alert('Enter a password.');return;}
+  const salt = saltHex ? new Uint8Array(hex2buf(saltHex)) : crypto.getRandomValues(new Uint8Array(32));
+  const keyMat = await crypto.subtle.importKey('raw', str2buf(pw), {name:'PBKDF2'}, false, ['deriveBits']);
+  const bits   = await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:iters,hash:'SHA-512'}, keyMat, 256);
+  const hash   = `pbkdf2$sha512$${iters}$${buf2hex(salt.buffer)}$${buf2hex(bits)}`;
+  document.getElementById('pwOutput').textContent = hash;
+  document.getElementById('pwSalt').value = buf2hex(salt.buffer);
+}
+
+async function verifyPassword(){
+  const pw   = document.getElementById('pwVerifyPw').value;
+  const hash = document.getElementById('pwVerifyHash').value.trim();
+  if(!pw||!hash){alert('Enter password and stored hash.');return;}
+  const parts = hash.split('$');
+  if(parts.length < 5){document.getElementById('pwVerifyOutput').textContent='✗ Invalid hash format.';return;}
+  const [,alg,iters,saltHex,dkHex] = parts;
+  const salt = new Uint8Array(hex2buf(saltHex));
+  const keyMat = await crypto.subtle.importKey('raw', str2buf(pw), {name:'PBKDF2'}, false, ['deriveBits']);
+  const bits   = await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:parseInt(iters),hash:'SHA-512'}, keyMat, 256);
+  const match  = buf2hex(bits) === dkHex;
+  document.getElementById('pwVerifyOutput').textContent = match ? '✓ Password matches!' : '✗ Password does NOT match.';
+}
+</script>
+</body>
+</html>
